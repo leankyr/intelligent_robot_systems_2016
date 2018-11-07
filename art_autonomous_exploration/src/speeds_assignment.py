@@ -3,12 +3,16 @@
 import rospy
 import math
 import time
+import numpy as np
+import ipdb
 
+#from __future__ import print_function
 from sensor_msgs.msg import Range
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
 
 from sonar_data_aggregator import SonarDataAggregator
+# from the class below come the laserData
 from laser_data_aggregator import LaserDataAggregator
 from navigation import Navigation
 
@@ -17,33 +21,36 @@ class RobotController:
 
     # Constructor
     def __init__(self):
-        
-      # Debugging purposes
-      self.print_velocities = rospy.get_param('print_velocities')
 
-      # Where and when should you use this?
-      self.stop_robot = False
+        # Debugging purposes
+        self.print_velocities = rospy.get_param('print_velocities')
 
-      # Create the needed objects
-      self.sonar_aggregation = SonarDataAggregator()
-      self.laser_aggregation = LaserDataAggregator()
-      self.navigation  = Navigation()
+        # Where and when should you use this?
+        self.stop_robot = False
 
-      self.linear_velocity  = 0
-      self.angular_velocity = 0
+        # set the laser subscriber topic
+        # self.laser_sub = rospy.Subscriber(rospy.get_param('laser_topic'),LaserScan,produceSpeedsLaser)
 
-      # Check if the robot moves with target or just wanders
-      self.move_with_target = rospy.get_param("calculate_target")
+        # Create the needed objects
+        self.sonar_aggregation = SonarDataAggregator()
+        self.laser_aggregation = LaserDataAggregator()
+        self.navigation  = Navigation()
 
-      # The timer produces events for sending the speeds every 110 ms
-      rospy.Timer(rospy.Duration(0.11), self.publishSpeeds)
-      self.velocity_publisher = rospy.Publisher(\
-              rospy.get_param('speeds_pub_topic'), Twist,\
-              queue_size = 10)
+        self.linear_velocity  = 0
+        self.angular_velocity = 0
+
+        # Check if the robot moves with target or just wanders
+        self.move_with_target = rospy.get_param("calculate_target")
+
+        # The timer produces events for sending the speeds every 110 ms
+        rospy.Timer(rospy.Duration(0.11), self.publishSpeeds)
+        self.velocity_publisher = rospy.Publisher(\
+        rospy.get_param('speeds_pub_topic'), Twist,\
+        queue_size = 10)
 
     # This function publishes the speeds and moves the robot
     def publishSpeeds(self, event):
-        
+
       # Produce speeds
       self.produceSpeeds()
 
@@ -52,7 +59,7 @@ class RobotController:
       twist.linear.x = self.linear_velocity
       twist.linear.y = 0
       twist.linear.z = 0
-      twist.angular.x = 0 
+      twist.angular.x = 0
       twist.angular.y = 0
       twist.angular.z = self.angular_velocity
 
@@ -66,15 +73,21 @@ class RobotController:
 
     # Produces speeds from the laser
     def produceSpeedsLaser(self):
-      scan = self.laser_aggregation.laser_scan
-      linear  = 0
-      angular = 0
-      ############################### NOTE QUESTION ############################
-      # Check what laser_scan contains and create linear and angular speeds
-      # for obstacle avoidance
-
-      ##########################################################################
-      return [linear, angular]
+        scan = np.array(self.laser_aggregation.laser_scan)
+        angle_min = self.laser_aggregation.angle_min
+        angle_max = self.laser_aggregation.angle_max
+        angles = np.linspace(angle_min, angle_max, len(scan))
+        
+        linear  = 0
+        angular = 0
+        
+        ############################### NOTE QUESTION ############################
+        # Check what laser_scan contains and create linear and angular speeds
+        # for obstacle avoidance
+        linear = -sum(np.cos(angles)/(scan**2))/len(scan)
+        angular = -sum(np.sin(angles)/(scan**2))/len(scan)
+        ##########################################################################
+        return [linear, angular]
 
     # Combines the speeds into one output using a motor schema approach
     def produceSpeeds(self):
@@ -99,9 +112,18 @@ class RobotController:
       # Get the submodule's speeds
       [l_laser, a_laser] = self.produceSpeedsLaser()
       
+      # Get Sonar Speeds:
+      # [l_sonar, a_sonar] = self.produceSpeedsSonars()
+
       # You must fill these
       self.linear_velocity  = 0
       self.angular_velocity = 0
+      
+      # Obstacle avoidacnce constants
+      c_l = 0.5 # initial 0.1
+      c_a = 0.5 # initial 0.25
+
+
       
       if self.move_with_target == True:
         [l_goal, a_goal] = self.navigation.velocitiesToNextSubtarget()
@@ -114,8 +136,13 @@ class RobotController:
         ############################### NOTE QUESTION ############################
         # Implement obstacle avoidance here using the laser speeds.
         # Hint: Subtract them from something constant
-        pass
+        self.linear_velocity = 0.3 + c_l * l_laser
+        self.angular_velocity = c_a * a_laser
         ##########################################################################
+        
+      # Make sure velocities are in the desired range
+      self.linear_velocity = min(0.3, max(-0.3, self.linear_velocity))
+      self.angular_velocity = min(0.3, max(-0.3, self.angular_velocity))
 
     # Assistive functions
     def stopRobot(self):
