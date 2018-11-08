@@ -230,7 +230,11 @@ class Navigation:
           # Fill the ps.pose.position values to show the path in RViz
           # You must understand what self.robot_perception.resolution
           # and self.robot_perception.origin are.
-        
+          ps.pose.position.x = p[0] * self.robot_perception.resolution \
+              + self.robot_perception.origin['x']
+          ps.pose.position.y = p[1] * self.robot_perception.resolution \
+              + self.robot_perception.origin['y']
+
           ########################################################################
           ros_path.poses.append(ps)
         self.path_publisher.publish(ros_path)
@@ -259,9 +263,9 @@ class Navigation:
         self.inner_target_exists = True
 
     def velocitiesToNextSubtarget(self):
-        
+
         [linear, angular] = [0, 0]
-        
+
         [rx, ry] = [\
             self.robot_perception.robot_pose['x_px'] - \
                     self.robot_perception.origin['x'] / self.robot_perception.resolution,\
@@ -275,13 +279,30 @@ class Navigation:
         # robot_perception and the next_subtarget [x,y]. From these, you can 
         # compute the robot velocities for the vehicle to approach the target.
         # Hint: Trigonometry is required
+        l_max = 0.3
+        a_max = 0.3
 
         if self.subtargets and self.next_subtarget <= len(self.subtargets) - 1:
             st_x = self.subtargets[self.next_subtarget][0]
             st_y = self.subtargets[self.next_subtarget][1]
-            
+
+
+            theta_rg = np.arctan2(st_y - ry, st_x - rx) 
+            dtheta = (theta_rg - theta)
+            if dtheta > np.pi:
+                omega = (dtheta - 2*np.pi)/np.pi
+            elif dtheta < -np.pi:
+                omega = (dtheta + 2*np.pi)/np.pi
+            else:
+                omega = (theta_rg - theta)/np.pi
+
+            # Nonlinear relations derived from experimentation
+            linear = l_max * ((1 - np.abs(omega)) ** 5)
+            angular = a_max * np.sign(omega) * (abs(omega) ** (1/5))
+
+
         ######################### NOTE: QUESTION  ##############################
 
         return [linear, angular]
 
-    
+
