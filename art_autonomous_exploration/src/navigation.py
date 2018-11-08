@@ -47,7 +47,7 @@ class Navigation:
 
         # Check if subgoal is reached via a timer callback
         rospy.Timer(rospy.Duration(0.10), self.checkTarget)
-        
+
         # Read the target function
         self.target_selector = rospy.get_param("target_selector")
         print "The selected target function is " + self.target_selector
@@ -57,17 +57,17 @@ class Navigation:
         self.path_publisher = \
             rospy.Publisher(rospy.get_param('path_pub_topic'), \
             Path, queue_size = 10)
-        
+
         # ROS Publisher for the subtargets
         self.subtargets_publisher = \
             rospy.Publisher(rospy.get_param('subgoals_pub_topic'),\
             MarkerArray, queue_size = 10)
-        
+
         # ROS Publisher for the current target
         self.current_target_publisher = \
             rospy.Publisher(rospy.get_param('curr_target_pub_topic'),\
             Marker, queue_size = 10)
-        
+
     def checkTarget(self, event):
         # Check if we have a target or if the robot just wanders
         if self.inner_target_exists == False or self.move_with_target == False or\
@@ -222,6 +222,7 @@ class Navigation:
         ros_path = Path()
         ros_path.header.frame_id = "map"
         for p in self.path:
+          # Here I define a msg of type PoseStamped()
           ps = PoseStamped()
           ps.header.frame_id = "map"
           ps.pose.position.x = 0
@@ -235,7 +236,8 @@ class Navigation:
           ps.pose.position.y = p[1] * self.robot_perception.resolution \
               + self.robot_perception.origin['y']
 
-          ########################################################################
+          ########################################################################i
+          # here we append (combine) the poses and then we publish them
           ros_path.poses.append(ps)
         self.path_publisher.publish(ros_path)
 
@@ -283,11 +285,15 @@ class Navigation:
         a_max = 0.3
 
         if self.subtargets and self.next_subtarget <= len(self.subtargets) - 1:
+            # st stands for subtarget
+            # phd tsardoulias p 256
             st_x = self.subtargets[self.next_subtarget][0]
             st_y = self.subtargets[self.next_subtarget][1]
 
-
-            theta_rg = np.arctan2(st_y - ry, st_x - rx) 
+            # this is the trigonometry part I guess
+            theta_rg = np.arctan2(st_y - ry, st_x - rx)
+            # theta_rg is the position of the subgoal
+            # rules of page 256
             dtheta = (theta_rg - theta)
             if dtheta > np.pi:
                 omega = (dtheta - 2*np.pi)/np.pi
